@@ -160,6 +160,72 @@ db.exec(`
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(dispute_id) REFERENCES disputes(id)
   );
+
+  CREATE TABLE IF NOT EXISTS soil_health_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    listing_id INTEGER,
+    ph REAL,
+    nitrogen REAL,
+    phosphorus REAL,
+    potassium REAL,
+    moisture REAL,
+    recorded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(listing_id) REFERENCES land_listings(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS crop_rotation_plans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    listing_id INTEGER,
+    crop_name TEXT NOT NULL,
+    season TEXT NOT NULL,
+    start_date TEXT,
+    end_date TEXT,
+    status TEXT DEFAULT 'planned',
+    notes TEXT,
+    FOREIGN KEY(listing_id) REFERENCES land_listings(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS brands (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id INTEGER,
+    name TEXT NOT NULL,
+    logo_url TEXT,
+    description TEXT,
+    website TEXT,
+    status TEXT DEFAULT 'active',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(owner_id) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS brand_partnerships (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    brand_id INTEGER,
+    listing_id INTEGER,
+    status TEXT DEFAULT 'pending',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(brand_id) REFERENCES brands(id),
+    FOREIGN KEY(listing_id) REFERENCES land_listings(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS logistics_partners (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    logo_url TEXT,
+    description TEXT,
+    service_type TEXT,
+    coverage_area TEXT,
+    status TEXT DEFAULT 'active'
+  );
+
+  CREATE TABLE IF NOT EXISTS logistics_partnerships (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    partner_id INTEGER,
+    listing_id INTEGER,
+    status TEXT DEFAULT 'pending',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(partner_id) REFERENCES logistics_partners(id),
+    FOREIGN KEY(listing_id) REFERENCES land_listings(id)
+  );
 `);
 
 // Simple migration for existing DBs
@@ -263,6 +329,62 @@ if (count.count === 0) {
   // Initialize some shares for mock user
   db.prepare("INSERT OR IGNORE INTO user_shares (user_id, listing_id, quantity) VALUES (1, 1, 50)").run();
   db.prepare("INSERT OR IGNORE INTO user_shares (user_id, listing_id, quantity) VALUES (1, 3, 25)").run();
+}
+
+// Seed Soil Health Records
+const soilCount = db.prepare("SELECT COUNT(*) as count FROM soil_health_records").get() as { count: number };
+if (soilCount.count === 0) {
+  const seedSoil = db.prepare(`
+    INSERT INTO soil_health_records (listing_id, ph, nitrogen, phosphorus, potassium, moisture)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  seedSoil.run(1, 6.5, 45, 30, 150, 22);
+  seedSoil.run(1, 6.4, 42, 28, 145, 20);
+  seedSoil.run(2, 7.2, 38, 25, 130, 18);
+}
+
+// Seed Crop Plans
+const cropPlanCount = db.prepare("SELECT COUNT(*) as count FROM crop_rotation_plans").get() as { count: number };
+if (cropPlanCount.count === 0) {
+  const seedCrop = db.prepare(`
+    INSERT INTO crop_rotation_plans (listing_id, crop_name, season, start_date, end_date, status)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  seedCrop.run(1, "Wheat", "Rabi 2025", "2025-11-01", "2026-04-15", "active");
+  seedCrop.run(1, "Cotton", "Kharif 2026", "2026-05-15", "2026-10-20", "planned");
+  seedCrop.run(2, "Soybeans", "Summer 2026", "2026-06-01", "2026-09-30", "planned");
+}
+
+// Seed Brands
+const brandCount = db.prepare("SELECT COUNT(*) as count FROM brands").get() as { count: number };
+if (brandCount.count === 0) {
+  const seedBrand = db.prepare(`
+    INSERT INTO brands (owner_id, name, logo_url, description, website)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  seedBrand.run(2, "Indus Gold", "https://picsum.photos/seed/brand1/200/200", "Premium organic wheat and cotton from the heart of Punjab.", "https://indusgold.com");
+  seedBrand.run(2, "Mato Soy", "https://picsum.photos/seed/brand2/200/200", "Sustainable soybean production from Brazil's finest fields.", "https://matosoy.br");
+  seedBrand.run(1, "Iowa Harvest", "https://picsum.photos/seed/brand3/200/200", "The gold standard of American corn.", "https://iowaharvest.us");
+
+  // Seed Partnerships
+  const seedPartnership = db.prepare(`
+    INSERT INTO brand_partnerships (brand_id, listing_id, status)
+    VALUES (?, ?, ?)
+  `);
+  seedPartnership.run(1, 1, "approved");
+  seedPartnership.run(2, 2, "approved");
+}
+
+// Seed Logistics
+const logisticsCount = db.prepare("SELECT COUNT(*) as count FROM logistics_partners").get() as { count: number };
+if (logisticsCount.count === 0) {
+  const seedLogistics = db.prepare(`
+    INSERT INTO logistics_partners (name, logo_url, description, service_type, coverage_area)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  seedLogistics.run("AgriTrans Global", "https://picsum.photos/seed/logistics1/200/200", "Specialized in bulk grain transport and storage.", "Bulk Transport", "Global");
+  seedLogistics.run("ColdChain Solutions", "https://picsum.photos/seed/logistics2/200/200", "State-of-the-art refrigerated transport for perishables.", "Cold Chain", "Regional");
+  seedLogistics.run("LastMile Harvest", "https://picsum.photos/seed/logistics3/200/200", "Connecting small farms directly to urban markets.", "Last Mile", "Local");
 }
 
 // Ensure at least one investor profile exists for mock user 1
@@ -609,6 +731,130 @@ async function startServer() {
       VALUES (?, ?, ?, ?, ?)
     `);
     stmt.run(user_id, pool_id, amount_requested, reason, evidence_url);
+    res.json({ success: true });
+  });
+
+  // Land Management API
+  app.get("/api/land-management/soil/:listingId", (req, res) => {
+    const records = db.prepare(`
+      SELECT * FROM soil_health_records 
+      WHERE listing_id = ? 
+      ORDER BY recorded_at DESC
+    `).all(req.params.listingId);
+    res.json(records);
+  });
+
+  app.post("/api/land-management/soil", (req, res) => {
+    const { listing_id, ph, nitrogen, phosphorus, potassium, moisture } = req.body;
+    const stmt = db.prepare(`
+      INSERT INTO soil_health_records (listing_id, ph, nitrogen, phosphorus, potassium, moisture)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(listing_id, ph, nitrogen, phosphorus, potassium, moisture);
+    res.json({ success: true });
+  });
+
+  app.get("/api/land-management/crop-plans/:listingId", (req, res) => {
+    const plans = db.prepare(`
+      SELECT * FROM crop_rotation_plans 
+      WHERE listing_id = ? 
+      ORDER BY start_date ASC
+    `).all(req.params.listingId);
+    res.json(plans);
+  });
+
+  app.post("/api/land-management/crop-plans", (req, res) => {
+    const { listing_id, crop_name, season, start_date, end_date, notes } = req.body;
+    const stmt = db.prepare(`
+      INSERT INTO crop_rotation_plans (listing_id, crop_name, season, start_date, end_date, notes)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(listing_id, crop_name, season, start_date, end_date, notes);
+    res.json({ success: true });
+  });
+
+  app.get("/api/weather/:location", (req, res) => {
+    const location = req.params.location;
+    const forecast = [
+      { date: "2026-03-05", temp: 28, condition: "Sunny", humidity: 45 },
+      { date: "2026-03-06", temp: 26, condition: "Partly Cloudy", humidity: 50 },
+      { date: "2026-03-07", temp: 24, condition: "Showers", humidity: 70 },
+      { date: "2026-03-08", temp: 27, condition: "Sunny", humidity: 40 },
+      { date: "2026-03-09", temp: 29, condition: "Clear", humidity: 35 },
+    ];
+    res.json({ location, forecast });
+  });
+
+  // Brands API
+  app.get("/api/brands", (req, res) => {
+    const brands = db.prepare("SELECT * FROM brands WHERE status = 'active'").all();
+    res.json(brands);
+  });
+
+  app.get("/api/brands/my/:userId", (req, res) => {
+    const brands = db.prepare("SELECT * FROM brands WHERE owner_id = ?").all(req.params.userId);
+    res.json(brands);
+  });
+
+  app.post("/api/brands", (req, res) => {
+    const { owner_id, name, logo_url, description, website } = req.body;
+    const stmt = db.prepare(`
+      INSERT INTO brands (owner_id, name, logo_url, description, website)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(owner_id, name, logo_url, description, website);
+    res.json({ success: true, id: result.lastInsertRowid });
+  });
+
+  app.get("/api/brand-partnerships/:listingId", (req, res) => {
+    const partnerships = db.prepare(`
+      SELECT bp.*, b.name as brand_name, b.logo_url as brand_logo
+      FROM brand_partnerships bp
+      JOIN brands b ON bp.brand_id = b.id
+      WHERE bp.listing_id = ?
+    `).all(req.params.listingId);
+    res.json(partnerships);
+  });
+
+  app.post("/api/brand-partnerships", (req, res) => {
+    const { brand_id, listing_id } = req.body;
+    const stmt = db.prepare(`
+      INSERT INTO brand_partnerships (brand_id, listing_id)
+      VALUES (?, ?)
+    `);
+    stmt.run(brand_id, listing_id);
+    res.json({ success: true });
+  });
+
+  app.patch("/api/brand-partnerships/:id", (req, res) => {
+    const { status } = req.body;
+    db.prepare("UPDATE brand_partnerships SET status = ? WHERE id = ?").run(status, req.params.id);
+    res.json({ success: true });
+  });
+
+  // Logistics API
+  app.get("/api/logistics-partners", (req, res) => {
+    const partners = db.prepare("SELECT * FROM logistics_partners WHERE status = 'active'").all();
+    res.json(partners);
+  });
+
+  app.get("/api/logistics-partnerships/:listingId", (req, res) => {
+    const partnerships = db.prepare(`
+      SELECT lp.*, p.name as partner_name, p.logo_url as partner_logo, p.service_type
+      FROM logistics_partnerships lp
+      JOIN logistics_partners p ON lp.partner_id = p.id
+      WHERE lp.listing_id = ?
+    `).all(req.params.listingId);
+    res.json(partnerships);
+  });
+
+  app.post("/api/logistics-partnerships", (req, res) => {
+    const { partner_id, listing_id } = req.body;
+    const stmt = db.prepare(`
+      INSERT INTO logistics_partnerships (partner_id, listing_id)
+      VALUES (?, ?)
+    `);
+    stmt.run(partner_id, listing_id);
     res.json({ success: true });
   });
 

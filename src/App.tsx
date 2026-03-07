@@ -49,7 +49,12 @@ import {
   Layers,
   BarChart,
   ArrowUpRight,
-  Target
+  Target,
+  Tag,
+  Award,
+  Store,
+  AlertCircle,
+  Plus,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { GoogleGenAI } from "@google/genai";
@@ -183,6 +188,77 @@ interface TakafulClaim {
   created_at: string;
 }
 
+interface SoilRecord {
+  id: number;
+  listing_id: number;
+  ph: number;
+  nitrogen: number;
+  phosphorus: number;
+  potassium: number;
+  moisture: number;
+  recorded_at: string;
+}
+
+interface CropPlan {
+  id: number;
+  listing_id: number;
+  crop_name: string;
+  season: string;
+  start_date: string;
+  end_date: string;
+  status: 'planned' | 'active' | 'completed';
+  notes?: string;
+}
+
+interface WeatherForecast {
+  date: string;
+  temp: number;
+  condition: string;
+  humidity: number;
+}
+
+interface Brand {
+  id: number;
+  owner_id: number;
+  name: string;
+  logo_url: string;
+  description: string;
+  website: string;
+  status: string;
+  created_at: string;
+}
+
+interface BrandPartnership {
+  id: number;
+  brand_id: number;
+  listing_id: number;
+  status: string;
+  brand_name?: string;
+  brand_logo?: string;
+  created_at: string;
+}
+
+interface LogisticsPartner {
+  id: number;
+  name: string;
+  logo_url: string;
+  description: string;
+  service_type: string;
+  coverage_area: string;
+  status: string;
+}
+
+interface LogisticsPartnership {
+  id: number;
+  partner_id: number;
+  listing_id: number;
+  status: string;
+  partner_name?: string;
+  partner_logo?: string;
+  service_type?: string;
+  created_at: string;
+}
+
 interface User {
   id: number;
   name: string;
@@ -262,42 +338,72 @@ const landValueData = [
 ];
 
 // Components
-const Navbar = ({ activeTab, setActiveTab, currency, setCurrency }: { activeTab: string, setActiveTab: (t: string) => void, currency: string, setCurrency: (c: any) => void }) => {
+const Navbar = ({ 
+  activeTab, 
+  setActiveTab, 
+  currency, 
+  setCurrency,
+  currentUser,
+  setCurrentUser
+}: { 
+  activeTab: string, 
+  setActiveTab: (t: string) => void, 
+  currency: string, 
+  setCurrency: (c: any) => void,
+  currentUser: User | null,
+  setCurrentUser: (u: User | null) => void
+}) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
 
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
-  const navGroups = [
+  const roles: ('investor' | 'owner' | 'farmer')[] = ['investor', 'owner', 'farmer'];
+
+  const allNavGroups = [
     { 
       id: 'invest', 
       label: 'Invest', 
+      roles: ['investor', 'owner'],
       items: [
-        { id: 'marketplace', label: 'Marketplace' },
-        { id: 'exchange', label: 'Live Exchange' },
-        { id: 'crowdfunding', label: 'Crowdfunding Concept' },
-        { id: 'takaful', label: 'Shariah Takaful' }
+        { id: 'marketplace', label: 'Marketplace', roles: ['investor', 'owner'] },
+        { id: 'exchange', label: 'Live Exchange', roles: ['investor'] },
+        { id: 'crowdfunding', label: 'Crowdfunding Concept', roles: ['investor'] },
+        { id: 'takaful', label: 'Shariah Takaful', roles: ['investor', 'farmer'] }
       ]
     },
     { 
       id: 'portfolio_group', 
       label: 'Portfolio', 
+      roles: ['investor', 'owner'],
       items: [
-        { id: 'dashboard', label: 'Dashboard' },
-        { id: 'analyzer', label: 'Investment Analyzer' },
-        { id: 'disputes', label: 'Disputes' }
+        { id: 'dashboard', label: 'Investor Dashboard', roles: ['investor'] },
+        { id: 'land_management', label: 'Land Management', roles: ['owner'] },
+        { id: 'analyzer', label: 'Investment Analyzer', roles: ['investor'] },
+        { id: 'disputes', label: 'Disputes', roles: ['investor', 'owner', 'farmer'] }
       ]
     },
     { 
       id: 'network', 
       label: 'Network', 
+      roles: ['investor', 'owner', 'farmer'],
       items: [
-        { id: 'community', label: 'Community' },
-        { id: 'services', label: 'Services' },
-        { id: 'about', label: 'About Us' }
+        { id: 'community', label: 'Community', roles: ['investor', 'owner', 'farmer'] },
+        { id: 'farmer_tools', label: 'Farmer Dashboard', roles: ['farmer'] },
+        { id: 'services', label: 'Services', roles: ['farmer', 'owner'] },
+        { id: 'about', label: 'About Us', roles: ['investor', 'owner', 'farmer'] }
       ]
     },
-    { id: 'profile', label: 'Profile' }
+    { id: 'profile', label: 'Profile', roles: ['investor', 'owner', 'farmer'] }
   ];
+
+  const navGroups = allNavGroups
+    .filter(group => !group.roles || (currentUser && group.roles.includes(currentUser.role)))
+    .map(group => ({
+      ...group,
+      items: group.items?.filter(item => !item.roles || (currentUser && item.roles.includes(currentUser.role)))
+    }))
+    .filter(group => !group.items || group.items.length > 0);
 
   const isActive = (group: any) => {
     if (group.items) {
@@ -413,6 +519,79 @@ const Navbar = ({ activeTab, setActiveTab, currency, setCurrency }: { activeTab:
             ))}
             
             <div className="h-6 w-px bg-ui-border mx-2" />
+            
+            <div className="relative">
+              <button 
+                onClick={() => setShowRoleSwitcher(!showRoleSwitcher)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-ui-surface border border-ui-border rounded-lg hover:bg-white transition-all group"
+              >
+                <div className="w-6 h-6 rounded-full bg-brand-100 flex items-center justify-center overflow-hidden border border-brand-200">
+                  {currentUser?.avatar_url ? (
+                    <img src={currentUser.avatar_url} alt={currentUser.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <UserCircle className="w-4 h-4 text-brand-600" />
+                  )}
+                </div>
+                <div className="text-left hidden lg:block">
+                  <p className="text-[9px] font-black text-brand-950 leading-none mb-0.5">{currentUser?.name || 'Guest'}</p>
+                  <p className="text-[8px] font-bold text-brand-600 uppercase tracking-widest leading-none">{currentUser?.role || 'Select Role'}</p>
+                </div>
+                <ChevronRight className={cn("w-3 h-3 text-slate-400 transition-transform", showRoleSwitcher ? "rotate-90" : "")} />
+              </button>
+
+              <AnimatePresence>
+                {showRoleSwitcher && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className="absolute top-full right-0 mt-2 w-56 bg-white border border-ui-border rounded-2xl shadow-2xl p-3 z-[100]"
+                  >
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Switch Account Role</p>
+                    <div className="space-y-1">
+                      {roles.map((role) => (
+                        <button
+                          key={role}
+                          onClick={() => {
+                            if (currentUser) {
+                              setCurrentUser({ ...currentUser, role });
+                              setActiveTab('home');
+                            }
+                            setShowRoleSwitcher(false);
+                          }}
+                          className={cn(
+                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group",
+                            currentUser?.role === role ? "bg-brand-50 border border-brand-100" : "hover:bg-ui-surface border border-transparent"
+                          )}
+                        >
+                          <div className={cn(
+                            "w-8 h-8 rounded-lg flex items-center justify-center transition-colors",
+                            currentUser?.role === role ? "bg-brand-900 text-white" : "bg-slate-100 text-slate-400 group-hover:bg-brand-100 group-hover:text-brand-600"
+                          )}>
+                            {role === 'investor' ? <TrendingUp className="w-4 h-4" /> : role === 'owner' ? <LandPlot className="w-4 h-4" /> : <Sprout className="w-4 h-4" />}
+                          </div>
+                          <div className="text-left">
+                            <p className={cn("text-[10px] font-bold uppercase tracking-widest", currentUser?.role === role ? "text-brand-900" : "text-slate-600")}>
+                              {role.charAt(0).toUpperCase() + role.slice(1)}
+                            </p>
+                            <p className="text-[8px] text-slate-400 font-medium">
+                              {role === 'investor' ? 'Marketplace & Portfolio' : role === 'owner' ? 'Land & Asset Mgmt' : 'Farming & Operations'}
+                            </p>
+                          </div>
+                          {currentUser?.role === role && <CheckCircle2 className="w-3 h-3 text-brand-600 ml-auto" />}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="h-px bg-ui-border my-3" />
+                    <button className="w-full flex items-center gap-3 px-3 py-2 text-[10px] font-bold text-rose-600 uppercase tracking-widest hover:bg-rose-50 rounded-xl transition-colors">
+                      <X className="w-3 h-3" />
+                      Sign Out
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
             <button className="bg-brand-900 text-white px-5 py-2 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-brand-800 transition-all shadow-lg shadow-brand-900/10">
               Launch App
             </button>
@@ -583,7 +762,43 @@ const AboutSection = () => {
   );
 };
 
-const Hero = ({ onExplore }: { onExplore: () => void }) => {
+const Hero = ({ onExplore, currentUser, setActiveTab }: { onExplore: () => void, currentUser: User | null, setActiveTab: (t: string) => void }) => {
+  const getHeroContent = () => {
+    if (currentUser?.role === 'farmer') {
+      return {
+        badge: "Farmer Operations",
+        title: "Scale Your <span className='text-brand-600'>Farming</span> with Precision.",
+        description: "Access advanced soil analytics, weather forecasting, and global logistics partnerships. Agriwise provides the tools you need to maximize yield and connect with global investors.",
+        primaryCTA: "Go to Farmer Dashboard",
+        primaryAction: () => setActiveTab('farmer_tools'),
+        secondaryCTA: "Explore Services",
+        secondaryAction: () => setActiveTab('services')
+      };
+    }
+    if (currentUser?.role === 'owner') {
+      return {
+        badge: "Land Management",
+        title: "Maximize Your <span className='text-brand-600'>Land</span> Value.",
+        description: "List your assets for fractional investment, track revenue from leases, and manage farming requests. Agriwise turns your land into a high-performance financial asset.",
+        primaryCTA: "Manage My Land",
+        primaryAction: () => setActiveTab('land_management'),
+        secondaryCTA: "List New Land",
+        secondaryAction: () => setActiveTab('marketplace')
+      };
+    }
+    return {
+      badge: "Grow your money",
+      title: "Digitising the <span className='text-brand-600'>Most Ancient</span> Form of Asset.",
+      description: "We grow your money.",
+      primaryCTA: "Explore Marketplace",
+      primaryAction: onExplore,
+      secondaryCTA: "Investor Dashboard",
+      secondaryAction: () => setActiveTab('dashboard')
+    };
+  };
+
+  const content = getHeroContent();
+
   return (
     <div className="relative overflow-hidden bg-white pt-24 pb-32">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
@@ -596,30 +811,32 @@ const Hero = ({ onExplore }: { onExplore: () => void }) => {
             >
               <div className="inline-flex items-center px-3 py-1 rounded-md text-[10px] font-bold tracking-[0.2em] uppercase bg-brand-50 text-brand-700 mb-8 border border-brand-100">
                 <span className="w-1.5 h-1.5 rounded-full bg-brand-500 mr-2 animate-pulse" />
-                Grow your money
+                {content.badge}
               </div>
-              <h1 className="text-6xl md:text-8xl font-sans font-black text-brand-950 leading-[0.9] mb-10 tracking-tighter">
-                The Global <span className="text-brand-600">Asset Class</span> for Modern Capital.
-              </h1>
+              <h1 
+                className="text-6xl md:text-8xl font-sans font-black text-brand-950 leading-[0.9] mb-10 tracking-tighter"
+                dangerouslySetInnerHTML={{ __html: content.title }}
+              />
               <p className="text-xl text-slate-600 mb-12 leading-relaxed max-w-xl">
-                stasso land provides the infrastructure for institutional-grade agricultural land investment worldwide. Connect with vetted projects across the Americas, Europe, and Asia, leverage precision data, and manage your global portfolio.
+                {content.description}
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
                 <motion.button 
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={onExplore}
+                  onClick={content.primaryAction}
                   className="flex items-center justify-center px-10 py-5 bg-brand-900 text-white rounded-xl text-sm font-bold uppercase tracking-widest hover:bg-brand-950 transition-all shadow-2xl shadow-brand-900/20 group"
                 >
-                  Explore Marketplace
+                  {content.primaryCTA}
                   <ArrowRight className="ml-3 w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </motion.button>
                 <motion.button 
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
+                  onClick={content.secondaryAction}
                   className="flex items-center justify-center px-10 py-5 bg-white border border-ui-border text-brand-950 rounded-xl text-sm font-bold uppercase tracking-widest hover:bg-ui-surface transition-all"
                 >
-                  Investor Deck
+                  {content.secondaryCTA}
                 </motion.button>
               </div>
             </motion.div>
@@ -689,10 +906,136 @@ const Hero = ({ onExplore }: { onExplore: () => void }) => {
   );
 };
 
+const TokenPurchaseModal = ({ 
+  listing, 
+  onClose, 
+  onSuccess, 
+  formatCurrency 
+}: { 
+  listing: LandListing, 
+  onClose: () => void, 
+  onSuccess: () => void,
+  formatCurrency: (a: number) => string 
+}) => {
+  const [quantity, setQuantity] = useState(1);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const handlePurchase = async () => {
+    setIsProcessing(true);
+    try {
+      const res = await fetch('/api/trade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: 1, // Mock user
+          listing_id: listing.id,
+          type: 'buy',
+          quantity: quantity
+        })
+      });
+      if (res.ok) {
+        onSuccess();
+        onClose();
+      }
+    } catch (error) {
+      console.error("Purchase failed:", error);
+    }
+    setIsProcessing(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-brand-950/40 backdrop-blur-sm">
+      <motion.div 
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="bg-white w-full max-w-md rounded-[48px] p-10 shadow-2xl border border-ui-border"
+      >
+        <div className="flex justify-between items-center mb-8">
+          <h3 className="text-2xl font-black text-brand-950 tracking-tight">Token <span className="text-brand-600">Purchase</span></h3>
+          <button onClick={onClose} className="p-2 hover:bg-ui-surface rounded-full transition-colors">
+            <X className="w-6 h-6 text-slate-400" />
+          </button>
+        </div>
+
+        <div className="mb-8">
+          <div className="flex items-center gap-4 mb-6">
+            <img src={listing.image_url} alt={listing.title} className="w-20 h-20 rounded-2xl object-cover border border-ui-border" referrerPolicy="no-referrer" />
+            <div>
+              <h4 className="text-sm font-bold text-brand-950">{listing.title}</h4>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{listing.location}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 mb-8">
+            <div className="bg-ui-surface p-4 rounded-2xl border border-ui-border">
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Token Price</p>
+              <p className="text-sm font-mono font-bold text-brand-950">{formatCurrency(listing.share_price)}</p>
+            </div>
+            <div className="bg-ui-surface p-4 rounded-2xl border border-ui-border">
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Available</p>
+              <p className="text-sm font-mono font-bold text-brand-950">{listing.total_shares} Tokens</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">Quantity to Purchase</label>
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                className="w-12 h-12 rounded-xl border border-ui-border flex items-center justify-center hover:bg-ui-surface transition-all"
+              >
+                <X className="w-4 h-4 rotate-45" />
+              </button>
+              <input 
+                type="number" 
+                value={quantity}
+                onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                className="flex-grow text-center text-xl font-black text-brand-950 bg-ui-surface border border-ui-border rounded-xl py-3 focus:outline-none focus:border-brand-500"
+              />
+              <button 
+                onClick={() => setQuantity(quantity + 1)}
+                className="w-12 h-12 rounded-xl border border-ui-border flex items-center justify-center hover:bg-ui-surface transition-all"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-6 border-t border-ui-border mb-8">
+          <div className="flex justify-between items-center">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Total Investment</p>
+            <p className="text-2xl font-black text-brand-900">{formatCurrency(listing.share_price * quantity)}</p>
+          </div>
+        </div>
+
+        <button 
+          onClick={handlePurchase}
+          disabled={isProcessing}
+          className="w-full py-5 bg-brand-900 text-white rounded-[24px] text-xs font-bold uppercase tracking-widest hover:bg-brand-950 transition-all shadow-xl shadow-brand-900/20 flex items-center justify-center gap-3"
+        >
+          {isProcessing ? (
+            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          ) : (
+            <>
+              <DollarSign className="w-4 h-4" />
+              Confirm Token Purchase
+            </>
+          )}
+        </button>
+        <p className="mt-4 text-[9px] text-center text-slate-400 font-medium px-6">
+          By confirming, you agree to the fractional ownership legal framework and Shariah-compliant investment protocols.
+        </p>
+      </motion.div>
+    </div>
+  );
+};
+
 const Marketplace = ({ formatCurrency }: { formatCurrency: (a: number) => string }) => {
   const [listings, setListings] = useState<LandListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'agricultural' | 'hunting' | 'sporting' | 'horticulture' | 'fishing' | 'development'>('all');
+  const [selectedListing, setSelectedListing] = useState<LandListing | null>(null);
 
   useEffect(() => {
     fetch('/api/listings')
@@ -787,20 +1130,28 @@ const Marketplace = ({ formatCurrency }: { formatCurrency: (a: number) => string
                   </h3>
                   <div className="grid grid-cols-2 gap-6 mb-8 py-6 border-y border-ui-border">
                     <div>
-                      <p className="text-[9px] uppercase tracking-widest text-slate-400 font-bold mb-2">Asset Price</p>
-                      <p className="text-lg font-mono font-bold text-brand-950">{formatCurrency(listing.price)}</p>
+                      <p className="text-[9px] uppercase tracking-widest text-slate-400 font-bold mb-2">Token Price</p>
+                      <p className="text-lg font-mono font-bold text-brand-950">{formatCurrency(listing.share_price)}</p>
                     </div>
                     <div>
                       <p className="text-[9px] uppercase tracking-widest text-slate-400 font-bold mb-2">Target ROI</p>
                       <p className="text-lg font-mono font-bold text-brand-600">{listing.roi_estimate}%</p>
                     </div>
                   </div>
+                  <div className="flex items-center justify-between mb-8">
+                    <div className="flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-brand-500" />
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Available Tokens</span>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-brand-950">{listing.total_shares}</span>
+                  </div>
                   <motion.button 
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
+                    onClick={() => setSelectedListing(listing)}
                     className="w-full flex items-center justify-center py-4 bg-brand-900 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-brand-950 transition-all shadow-lg shadow-brand-900/10"
                   >
-                    Invest Now
+                    Buy Tokens
                     <ChevronRight className="ml-1 w-4 h-4" />
                   </motion.button>
                 </div>
@@ -808,15 +1159,188 @@ const Marketplace = ({ formatCurrency }: { formatCurrency: (a: number) => string
             ))}
           </div>
         )}
+
+        <AnimatePresence>
+          {selectedListing && (
+            <TokenPurchaseModal 
+              listing={selectedListing} 
+              onClose={() => setSelectedListing(null)}
+              onSuccess={() => {
+                // Refresh listings or show success toast
+                fetch('/api/listings')
+                  .then(res => res.json())
+                  .then(data => setListings(data));
+              }}
+              formatCurrency={formatCurrency}
+            />
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
 };
 
-const Dashboard = ({ formatCurrency }: { formatCurrency: (a: number) => string }) => {
+const LandownerDashboard = ({ formatCurrency, setActiveTab }: { formatCurrency: (a: number) => string, setActiveTab: (t: string) => void }) => {
+  const [myListings, setMyListings] = useState<LandListing[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchMyListings = async () => {
+      try {
+        const res = await fetch('/api/listings'); // In a real app, filter by owner_id
+        const data = await res.json();
+        // Mock filtering for owner_id 2
+        setMyListings(data.filter((l: any) => l.owner_id === 2));
+      } catch (error) {
+        console.error("Failed to fetch listings:", error);
+      }
+      setLoading(false);
+    };
+    fetchMyListings();
+  }, []);
+
+  return (
+    <div className="py-24 bg-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="mb-16">
+          <div className="inline-flex items-center px-3 py-1 rounded-md text-[10px] font-bold tracking-[0.2em] uppercase bg-brand-50 text-brand-700 mb-4 border border-brand-100">
+            Asset Management
+          </div>
+          <h2 className="text-4xl md:text-5xl font-sans font-black text-brand-950 mb-4 tracking-tight">
+            Land <span className="text-brand-600">Portfolio</span>
+          </h2>
+          <p className="text-slate-500 font-medium">Manage your land assets, track revenue, and monitor farming operations.</p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+          <div className="lg:col-span-2 space-y-8">
+            <div className="bg-white p-10 rounded-[48px] border border-ui-border shadow-sm">
+              <div className="flex items-center justify-between mb-10">
+                <h3 className="text-sm font-bold uppercase tracking-widest text-brand-950">My Active Listings</h3>
+                <button className="bg-brand-900 text-white px-6 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-brand-950 transition-all">
+                  List New Land
+                </button>
+              </div>
+
+              {loading ? (
+                <div className="space-y-4">
+                  {[1, 2].map(i => <div key={i} className="h-24 bg-ui-surface rounded-3xl animate-pulse" />)}
+                </div>
+              ) : myListings.length === 0 ? (
+                <div className="text-center py-16 bg-ui-surface rounded-[32px] border border-dashed border-ui-border">
+                  <LandPlot className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+                  <p className="text-slate-400 font-medium">You haven't listed any land yet.</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {myListings.map(listing => (
+                    <div key={listing.id} className="p-6 bg-ui-surface rounded-[32px] border border-ui-border flex items-center justify-between group hover:border-brand-200 transition-all">
+                      <div className="flex items-center gap-6">
+                        <div className="w-20 h-20 rounded-2xl overflow-hidden border border-ui-border">
+                          <img src={listing.image_url} alt={listing.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-brand-950 mb-1">{listing.title}</h4>
+                          <p className="text-[10px] text-slate-500 flex items-center mb-2">
+                            <MapPin className="w-3 h-3 mr-1 text-brand-500" /> {listing.location}
+                          </p>
+                          <div className="flex gap-2">
+                            <span className="px-2 py-0.5 bg-brand-50 text-brand-600 rounded text-[8px] font-bold uppercase tracking-widest border border-brand-100">
+                              {listing.size} Acres
+                            </span>
+                            <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded text-[8px] font-bold uppercase tracking-widest border border-emerald-100">
+                              {listing.status}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Valuation</p>
+                        <p className="text-lg font-mono font-bold text-brand-950 mb-3">{formatCurrency(listing.total_shares * listing.share_price)}</p>
+                        <button className="text-brand-600 text-[10px] font-bold uppercase tracking-widest hover:underline">Manage Asset</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-brand-950 p-10 rounded-[48px] text-white shadow-2xl relative overflow-hidden">
+              <div className="relative z-10">
+                <h3 className="text-sm font-bold uppercase tracking-widest text-brand-400 mb-8">Revenue Overview</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div>
+                    <p className="text-[10px] font-bold text-brand-300 uppercase tracking-widest mb-2">Monthly Lease</p>
+                    <p className="text-2xl font-mono font-bold">{formatCurrency(450000)}</p>
+                    <p className="text-[9px] text-emerald-400 font-bold mt-1">+8.4% vs last month</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-brand-300 uppercase tracking-widest mb-2">Token Dividends</p>
+                    <p className="text-2xl font-mono font-bold">{formatCurrency(125000)}</p>
+                    <p className="text-[9px] text-emerald-400 font-bold mt-1">+12.1% vs last month</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-brand-300 uppercase tracking-widest mb-2">Total Earnings</p>
+                    <p className="text-2xl font-mono font-bold">{formatCurrency(575000)}</p>
+                    <p className="text-[9px] text-emerald-400 font-bold mt-1">On track for Q3 target</p>
+                  </div>
+                </div>
+              </div>
+              <TrendingUp className="absolute -bottom-10 -right-10 w-64 h-64 text-white/5" />
+            </div>
+          </div>
+
+          <div className="space-y-8">
+            <div className="bg-white p-10 rounded-[48px] border border-ui-border shadow-sm">
+              <h3 className="text-sm font-bold uppercase tracking-widest text-brand-950 mb-8">Management Requests</h3>
+              <div className="space-y-6">
+                {[
+                  { farmer: "Ahmed Khan", land: "Indus Valley Plot A", type: "Crop Rotation Change", date: "2h ago" },
+                  { farmer: "Zubair Ali", land: "Potohar Plateau Plot 4", type: "Logistics Partnership", date: "1d ago" }
+                ].map((req, i) => (
+                  <div key={i} className="pb-6 border-b border-ui-border last:border-0 last:pb-0">
+                    <div className="flex justify-between items-start mb-2">
+                      <h4 className="text-xs font-bold text-brand-950">{req.farmer}</h4>
+                      <span className="text-[8px] text-slate-400 font-bold uppercase">{req.date}</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mb-4">{req.type} for <span className="text-brand-600 font-bold">{req.land}</span></p>
+                    <div className="flex gap-2">
+                      <button className="flex-grow py-2 bg-brand-900 text-white rounded-lg text-[9px] font-bold uppercase tracking-widest hover:bg-brand-950 transition-all">Approve</button>
+                      <button className="px-4 py-2 bg-ui-surface text-slate-400 border border-ui-border rounded-lg text-[9px] font-bold uppercase tracking-widest hover:text-rose-600 transition-all">Deny</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-amber-50 p-10 rounded-[48px] border border-amber-100">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center shadow-lg">
+                  <AlertCircle className="text-white w-5 h-5" />
+                </div>
+                <h3 className="text-sm font-bold text-amber-900">Active Disputes</h3>
+              </div>
+              <p className="text-xs text-amber-700 font-medium mb-6">You have 1 active dispute regarding boundary verification for Indus Valley Plot B.</p>
+              <button 
+                onClick={() => setActiveTab('disputes')}
+                className="w-full py-3 bg-amber-500 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-amber-600 transition-all shadow-lg shadow-amber-500/20"
+              >
+                View Dispute Details
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const InvestorDashboard = ({ formatCurrency }: { formatCurrency: (a: number) => string }) => {
   const [matches, setMatches] = useState<LandListing[]>([]);
   const [loadingMatches, setLoadingMatches] = useState(true);
   const [userProfile, setUserProfile] = useState<User | null>(null);
+  const [portfolio, setPortfolio] = useState<PortfolioItem[]>([]);
+  const [loadingPortfolio, setLoadingPortfolio] = useState(true);
 
   useEffect(() => {
     const fetchMatches = async () => {
@@ -892,8 +1416,22 @@ const Dashboard = ({ formatCurrency }: { formatCurrency: (a: number) => string }
       setLoadingMatches(false);
     };
 
+    const fetchPortfolio = async () => {
+      try {
+        const res = await fetch('/api/portfolio/1');
+        const data = await res.json();
+        setPortfolio(data);
+      } catch (error) {
+        console.error("Failed to fetch portfolio:", error);
+      }
+      setLoadingPortfolio(false);
+    };
+
     fetchMatches();
+    fetchPortfolio();
   }, []);
+
+  const totalPortfolioValue = portfolio.reduce((acc, item) => acc + (item.quantity * item.share_price), 0);
 
   return (
     <div className="py-24 bg-white">
@@ -1022,7 +1560,7 @@ const Dashboard = ({ formatCurrency }: { formatCurrency: (a: number) => string }
             >
               <div className="relative z-10">
                 <p className="text-brand-400 text-[9px] font-bold uppercase tracking-[0.2em] mb-4">AUM</p>
-                <h4 className="text-5xl font-mono font-bold mb-8 tracking-tighter">Rs. 1.24M</h4>
+                <h4 className="text-5xl font-mono font-bold mb-8 tracking-tighter">{formatCurrency(totalPortfolioValue)}</h4>
                 <div className="flex items-center text-brand-400 text-[10px] font-bold uppercase tracking-widest bg-white/5 w-fit px-4 py-2 rounded-lg backdrop-blur-sm border border-white/10">
                   <TrendingUp className="w-3 h-3 mr-2" />
                   +15.2% YTD
@@ -1059,34 +1597,39 @@ const Dashboard = ({ formatCurrency }: { formatCurrency: (a: number) => string }
               <thead>
                 <tr className="bg-white">
                   <th className="px-10 py-5 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Asset Name</th>
-                  <th className="px-10 py-5 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Entry Date</th>
-                  <th className="px-10 py-5 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Capital</th>
-                  <th className="px-10 py-5 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Status</th>
+                  <th className="px-10 py-5 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Tokens Owned</th>
+                  <th className="px-10 py-5 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Token Price</th>
+                  <th className="px-10 py-5 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Total Value</th>
                   <th className="px-10 py-5 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-ui-border">
-                {[
-                  { name: 'Indus Valley Farm', date: 'Oct 12, 2025', amount: 'Rs. 450,000', status: 'Active' },
-                  { name: 'Sindh River Orchard', date: 'Sep 28, 2025', amount: 'Rs. 790,500', status: 'Pending' },
-                ].map((inv, idx) => (
-                  <tr key={idx} className="hover:bg-ui-surface transition-colors group">
-                    <td className="px-10 py-8 font-bold text-brand-950 text-sm">{inv.name}</td>
-                    <td className="px-10 py-8 text-[11px] text-slate-500 font-bold uppercase tracking-wider">{inv.date}</td>
-                    <td className="px-10 py-8 font-mono font-bold text-brand-950 text-sm">{inv.amount}</td>
-                    <td className="px-10 py-8">
-                      <span className={cn(
-                        "px-3 py-1 rounded-md text-[9px] font-bold uppercase tracking-widest",
-                        inv.status === 'Active' ? "bg-brand-50 text-brand-600 border border-brand-100" : "bg-vibrant-amber/10 text-vibrant-amber border border-vibrant-amber/20"
-                      )}>
-                        {inv.status}
-                      </span>
-                    </td>
-                    <td className="px-10 py-8">
-                      <button className="text-slate-400 hover:text-brand-900 font-bold text-[10px] uppercase tracking-widest transition-colors">Audit Report</button>
-                    </td>
+                {loadingPortfolio ? (
+                  <tr>
+                    <td colSpan={5} className="px-10 py-8 text-center text-slate-400 text-xs">Loading positions...</td>
                   </tr>
-                ))}
+                ) : portfolio.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-10 py-8 text-center text-slate-400 text-xs">No active positions found.</td>
+                  </tr>
+                ) : (
+                  portfolio.map((item, idx) => (
+                    <tr key={idx} className="hover:bg-ui-surface transition-colors group">
+                      <td className="px-10 py-8">
+                        <div className="flex items-center gap-4">
+                          <img src={item.image_url} alt={item.title} className="w-10 h-10 rounded-lg object-cover border border-ui-border" referrerPolicy="no-referrer" />
+                          <span className="font-bold text-brand-950 text-sm">{item.title}</span>
+                        </div>
+                      </td>
+                      <td className="px-10 py-8 text-[11px] text-slate-500 font-bold uppercase tracking-wider">{item.quantity} Tokens</td>
+                      <td className="px-10 py-8 font-mono font-bold text-brand-950 text-sm">{formatCurrency(item.share_price)}</td>
+                      <td className="px-10 py-8 font-mono font-bold text-brand-600 text-sm">{formatCurrency(item.quantity * item.share_price)}</td>
+                      <td className="px-10 py-8">
+                        <button className="text-slate-400 hover:text-brand-900 font-bold text-[10px] uppercase tracking-widest transition-colors">Audit Report</button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -1501,6 +2044,11 @@ const DisputeModule = () => {
       icon: Cpu,
       title: "AgriTech Stack",
       description: "Proprietary IoT and satellite data integration for real-time asset monitoring and yield auditing."
+    },
+    {
+      icon: Activity,
+      title: "Farmer Tools",
+      description: "Advanced land management suite including soil health monitoring and crop rotation planning."
     },
     {
       icon: FileSearch,
@@ -2573,7 +3121,7 @@ const InvestmentAnalyzer = () => {
   );
 };
 
-const UserProfileManagement = () => {
+const UserProfileManagement = ({ currentUser, setCurrentUser }: { currentUser: User | null, setCurrentUser: (u: User | null) => void }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -2585,9 +3133,13 @@ const UserProfileManagement = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      const res = await fetch('/api/users/1');
+      if (!currentUser) return;
+      const res = await fetch(`/api/users/${currentUser.id}`);
       const data = await res.json();
       
+      // Sync with currentUser role if changed via Navbar
+      data.role = currentUser.role;
+
       // Parse JSON fields in profile
       if (data.profile) {
         if (data.role === 'investor') {
@@ -2627,7 +3179,7 @@ const UserProfileManagement = () => {
       setLoading(false);
     };
     fetchData();
-  }, []);
+  }, [currentUser?.id, currentUser?.role]);
 
   const handleSave = async () => {
     if (!user) return;
@@ -2651,6 +3203,7 @@ const UserProfileManagement = () => {
           body: JSON.stringify({ user_id: user.id, ...user.profile })
         })
       ]);
+      setCurrentUser(user);
       alert("Profile updated successfully!");
     } catch (error) {
       console.error("Failed to save profile:", error);
@@ -2759,9 +3312,28 @@ const UserProfileManagement = () => {
                         className="text-2xl font-black text-brand-950 bg-transparent border-b-2 border-transparent hover:border-brand-200 focus:border-brand-600 focus:outline-none text-center md:text-left"
                       />
                       <div className="flex justify-center md:justify-start gap-2">
-                        <span className="px-3 py-1 bg-brand-900 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest">
-                          {user?.role}
-                        </span>
+                        <select 
+                          value={user?.role}
+                          onChange={e => {
+                            const newRole = e.target.value as 'investor' | 'owner' | 'farmer';
+                            if (user) {
+                              setUser({...user, role: newRole});
+                              // Initialize empty profile if role changes
+                              if (newRole === 'investor') {
+                                user.profile = { user_id: user.id, min_roi: 5, max_risk: 'Medium', min_historical_yield: 0, preferred_sectors: [], preferred_locations: [], preferred_stages: ['Growth', 'Mature'], min_development_potential: 'Medium', investment_history: [] };
+                              } else if (newRole === 'owner') {
+                                user.profile = { user_id: user.id, total_acres: 0, land_locations: [], land_types: [], ownership_documents_url: '' };
+                              } else if (newRole === 'farmer') {
+                                user.profile = { user_id: user.id, specialization: [], past_projects: [], project_proposals: [] };
+                              }
+                            }
+                          }}
+                          className="px-3 py-1 bg-brand-900 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest focus:outline-none cursor-pointer border-none appearance-none"
+                        >
+                          <option value="investor">Investor</option>
+                          <option value="owner">Landowner</option>
+                          <option value="farmer">Farmer</option>
+                        </select>
                         <span className={cn(
                           "px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5",
                           user?.verification_status === 'verified' ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : 
@@ -3477,9 +4049,705 @@ const Takaful = ({ formatCurrency }: { formatCurrency: (a: number) => string }) 
   );
 };
 
+const FarmerTools = ({ formatCurrency }: { formatCurrency: (a: number) => string }) => {
+  const [activeSubTab, setActiveSubTab] = useState<'soil' | 'crops' | 'weather' | 'brands' | 'logistics'>('soil');
+  const [soilRecords, setSoilRecords] = useState<SoilRecord[]>([]);
+  const [cropPlans, setCropPlans] = useState<CropPlan[]>([]);
+  const [weather, setWeather] = useState<WeatherForecast[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [myBrands, setMyBrands] = useState<Brand[]>([]);
+  const [partnerships, setPartnerships] = useState<BrandPartnership[]>([]);
+  const [logisticsPartners, setLogisticsPartners] = useState<LogisticsPartner[]>([]);
+  const [logisticsPartnerships, setLogisticsPartnerships] = useState<LogisticsPartnership[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedListingId, setSelectedListingId] = useState(1);
+  const [showBrandModal, setShowBrandModal] = useState(false);
+  const [newBrand, setNewBrand] = useState({ name: '', description: '', website: '', logo_url: '' });
+  const [createSuccess, setCreateSuccess] = useState(false);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const [soilRes, cropsRes, weatherRes, brandsRes, myBrandsRes, partnershipsRes, logisticsPartnersRes, logisticsPartnershipsRes] = await Promise.all([
+          fetch(`/api/land-management/soil/${selectedListingId}`),
+          fetch(`/api/land-management/crop-plans/${selectedListingId}`),
+          fetch(`/api/weather/Punjab`),
+          fetch(`/api/brands`),
+          fetch(`/api/brands/my/2`), // Mock user 2 is owner/farmer
+          fetch(`/api/brand-partnerships/${selectedListingId}`),
+          fetch(`/api/logistics-partners`),
+          fetch(`/api/logistics-partnerships/${selectedListingId}`)
+        ]);
+        setSoilRecords(await soilRes.json());
+        setCropPlans(await cropsRes.json());
+        const weatherData = await weatherRes.json();
+        setWeather(weatherData.forecast);
+        setBrands(await brandsRes.json());
+        setMyBrands(await myBrandsRes.json());
+        setPartnerships(await partnershipsRes.json());
+        setLogisticsPartners(await logisticsPartnersRes.json());
+        setLogisticsPartnerships(await logisticsPartnershipsRes.json());
+      } catch (error) {
+        console.error("Failed to fetch farmer tools data:", error);
+      }
+      setLoading(false);
+    };
+    fetchData();
+  }, [selectedListingId]);
+
+  const handleCreateBrand = async () => {
+    try {
+      const res = await fetch('/api/brands', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...newBrand, owner_id: 2 })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMyBrands([...myBrands, { ...newBrand, id: data.id, owner_id: 2, status: 'active', created_at: new Date().toISOString() } as Brand]);
+        setCreateSuccess(true);
+        setTimeout(() => {
+          setShowBrandModal(false);
+          setCreateSuccess(false);
+          setNewBrand({ name: '', description: '', website: '', logo_url: '' });
+        }, 2000);
+      }
+    } catch (error) {
+      console.error("Failed to create brand:", error);
+    }
+  };
+
+  const handleRequestPartnership = async (brandId: number) => {
+    try {
+      const res = await fetch('/api/brand-partnerships', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brand_id: brandId, listing_id: selectedListingId })
+      });
+      if (res.ok) {
+        const brand = brands.find(b => b.id === brandId);
+        setPartnerships([...partnerships, { 
+          brand_id: brandId, 
+          listing_id: selectedListingId, 
+          status: 'pending', 
+          brand_name: brand?.name, 
+          brand_logo: brand?.logo_url,
+          created_at: new Date().toISOString() 
+        } as BrandPartnership]);
+      }
+    } catch (error) {
+      console.error("Failed to request partnership:", error);
+    }
+  };
+
+  const handleRequestLogistics = async (partnerId: number) => {
+    try {
+      const res = await fetch('/api/logistics-partnerships', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partner_id: partnerId, listing_id: selectedListingId })
+      });
+      if (res.ok) {
+        const partner = logisticsPartners.find(p => p.id === partnerId);
+        setLogisticsPartnerships([...logisticsPartnerships, { 
+          partner_id: partnerId, 
+          listing_id: selectedListingId, 
+          status: 'pending', 
+          partner_name: partner?.name, 
+          partner_logo: partner?.logo_url,
+          service_type: partner?.service_type,
+          created_at: new Date().toISOString() 
+        } as LogisticsPartnership]);
+      }
+    } catch (error) {
+      console.error("Failed to request logistics partnership:", error);
+    }
+  };
+
+  return (
+    <div className="py-24 bg-ui-surface min-h-screen">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="mb-16">
+          <div className="inline-flex items-center px-3 py-1 rounded-md text-[10px] font-bold tracking-[0.2em] uppercase bg-brand-50 text-brand-700 mb-4 border border-brand-100">
+            Farmer Infrastructure
+          </div>
+          <h2 className="text-4xl md:text-5xl font-sans font-black text-brand-950 mb-4 tracking-tight">
+            Land <span className="text-brand-600">Management</span> Tools
+          </h2>
+          <p className="text-slate-500 font-medium max-w-2xl">
+            Precision tools for modern agriculture. Monitor soil health, plan crop rotations, and stay ahead of weather patterns.
+          </p>
+        </div>
+
+        <div className="flex gap-4 mb-12 overflow-x-auto pb-2">
+          {[
+            { id: 'soil', label: 'Soil Health', icon: Activity },
+            { id: 'crops', label: 'Crop Rotation', icon: Sprout },
+            { id: 'weather', label: 'Weather Forecast', icon: Waves },
+            { id: 'brands', label: 'Brands & Partnerships', icon: Award },
+            { id: 'logistics', label: 'Logistics', icon: Truck }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveSubTab(tab.id as any)}
+              className={cn(
+                "flex items-center gap-3 px-8 py-4 rounded-2xl text-xs font-bold uppercase tracking-widest transition-all whitespace-nowrap border",
+                activeSubTab === tab.id 
+                  ? "bg-brand-900 text-white border-brand-900 shadow-xl shadow-brand-900/20" 
+                  : "bg-white text-slate-400 border-ui-border hover:border-brand-300"
+              )}
+            >
+              <tab.icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {[1, 2, 3].map(i => <div key={i} className="animate-pulse bg-white h-64 rounded-[40px] border border-ui-border" />)}
+          </div>
+        ) : (
+          <AnimatePresence mode="wait">
+            {activeSubTab === 'soil' && (
+              <motion.div
+                key="soil"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="grid grid-cols-1 lg:grid-cols-3 gap-8"
+              >
+                <div className="lg:col-span-2 space-y-8">
+                  <div className="bg-white p-10 rounded-[48px] border border-ui-border shadow-sm">
+                    <div className="flex items-center justify-between mb-10">
+                      <h4 className="text-sm font-bold uppercase tracking-widest text-brand-950">Nutrient Levels</h4>
+                      <div className="flex gap-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-brand-600" />
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nitrogen</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-vibrant-amber" />
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Phosphorus</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="h-[300px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={soilRecords.slice().reverse()}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis 
+                            dataKey="recorded_at" 
+                            axisLine={false} 
+                            tickLine={false} 
+                            tick={{ fontSize: 10, fill: '#94a3b8', fontWeight: 600 }}
+                            tickFormatter={(val) => new Date(val).toLocaleDateString()}
+                          />
+                          <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8', fontWeight: 600 }} />
+                          <Tooltip 
+                            contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                          />
+                          <Line type="monotone" dataKey="nitrogen" stroke="#1e293b" strokeWidth={3} dot={{ r: 4, fill: '#1e293b' }} />
+                          <Line type="monotone" dataKey="phosphorus" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, fill: '#f59e0b' }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="bg-white p-8 rounded-[40px] border border-ui-border">
+                      <h5 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-6">Soil pH Balance</h5>
+                      <div className="flex items-end gap-4">
+                        <p className="text-5xl font-black text-brand-950">{soilRecords[0]?.ph || 'N/A'}</p>
+                        <div className="mb-2">
+                          <span className="px-2 py-1 bg-emerald-50 text-emerald-600 rounded text-[8px] font-bold uppercase tracking-widest border border-emerald-100">Optimal</span>
+                        </div>
+                      </div>
+                      <p className="mt-4 text-xs text-slate-500 font-medium">Your soil pH is within the ideal range for wheat and cotton rotation.</p>
+                    </div>
+                    <div className="bg-white p-8 rounded-[40px] border border-ui-border">
+                      <h5 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-6">Moisture Content</h5>
+                      <div className="flex items-end gap-4">
+                        <p className="text-5xl font-black text-brand-600">{soilRecords[0]?.moisture || 'N/A'}%</p>
+                        <div className="mb-2 text-brand-500">
+                          <Waves className="w-6 h-6" />
+                        </div>
+                      </div>
+                      <p className="mt-4 text-xs text-slate-500 font-medium">Moisture levels are stable. Next irrigation cycle recommended in 3 days.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-8">
+                  <div className="bg-brand-950 p-10 rounded-[48px] text-white shadow-2xl">
+                    <h4 className="text-[10px] font-bold uppercase tracking-widest text-brand-400 mb-8">Recent Soil Tests</h4>
+                    <div className="space-y-6">
+                      {soilRecords.map(record => (
+                        <div key={record.id} className="flex justify-between items-center pb-6 border-b border-white/10 last:border-0 last:pb-0">
+                          <div>
+                            <p className="text-xs font-bold">{new Date(record.recorded_at).toLocaleDateString()}</p>
+                            <p className="text-[10px] text-brand-500 uppercase tracking-widest font-bold">Standard Audit</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-mono font-bold">pH {record.ph}</p>
+                            <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">Healthy</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <button className="w-full mt-10 py-4 bg-white/10 hover:bg-white/20 border border-white/10 rounded-2xl text-[10px] font-bold uppercase tracking-widest transition-all">
+                      Request New Audit
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeSubTab === 'crops' && (
+              <motion.div
+                key="crops"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="space-y-8"
+              >
+                <div className="bg-white p-10 rounded-[48px] border border-ui-border shadow-sm">
+                  <div className="flex items-center justify-between mb-12">
+                    <h4 className="text-sm font-bold uppercase tracking-widest text-brand-950">Rotation Timeline</h4>
+                    <button className="px-6 py-2 bg-brand-900 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-brand-950 transition-all">
+                      Add New Plan
+                    </button>
+                  </div>
+                  
+                  <div className="relative">
+                    <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-slate-100" />
+                    <div className="space-y-12">
+                      {cropPlans.map((plan, idx) => (
+                        <div key={plan.id} className="relative pl-24">
+                          <div className={cn(
+                            "absolute left-6 top-0 w-4 h-4 rounded-full border-4 border-white shadow-md z-10",
+                            plan.status === 'active' ? "bg-brand-600 scale-125" : "bg-slate-300"
+                          )} />
+                          <div className="bg-ui-surface p-8 rounded-[32px] border border-ui-border group hover:border-brand-300 transition-all">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                              <div>
+                                <div className="flex items-center gap-3 mb-2">
+                                  <h5 className="text-xl font-black text-brand-950">{plan.crop_name}</h5>
+                                  <span className={cn(
+                                    "px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-widest border",
+                                    plan.status === 'active' ? "bg-brand-50 text-brand-600 border-brand-100" : "bg-slate-50 text-slate-400 border-slate-100"
+                                  )}>
+                                    {plan.status}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-500 font-medium">{plan.season} • {new Date(plan.start_date).toLocaleDateString()} - {new Date(plan.end_date).toLocaleDateString()}</p>
+                              </div>
+                              <div className="flex gap-4">
+                                <div className="text-center px-6 py-3 bg-white rounded-2xl border border-ui-border">
+                                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Expected Yield</p>
+                                  <p className="text-sm font-black text-brand-950">8.5 Tons/AC</p>
+                                </div>
+                                <div className="text-center px-6 py-3 bg-white rounded-2xl border border-ui-border">
+                                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Risk Level</p>
+                                  <p className="text-sm font-black text-emerald-600">Low</p>
+                                </div>
+                              </div>
+                            </div>
+                            {plan.notes && (
+                              <div className="mt-6 pt-6 border-t border-ui-border">
+                                <p className="text-xs text-slate-500 leading-relaxed italic">"{plan.notes}"</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeSubTab === 'weather' && (
+              <motion.div
+                key="weather"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="grid grid-cols-1 lg:grid-cols-4 gap-8"
+              >
+                <div className="lg:col-span-1">
+                  <div className="bg-brand-900 p-10 rounded-[48px] text-white shadow-2xl h-full flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-8">
+                        <MapPin className="w-4 h-4 text-brand-400" />
+                        <span className="text-xs font-bold uppercase tracking-widest text-brand-400">Punjab, Pakistan</span>
+                      </div>
+                      <div className="mb-12">
+                        <p className="text-7xl font-black mb-4">{weather[0]?.temp}°</p>
+                        <p className="text-xl font-bold">{weather[0]?.condition}</p>
+                      </div>
+                    </div>
+                    <div className="space-y-6">
+                      <div className="flex justify-between items-center py-4 border-t border-white/10">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-brand-400">Humidity</span>
+                        <span className="text-sm font-bold">{weather[0]?.humidity}%</span>
+                      </div>
+                      <div className="flex justify-between items-center py-4 border-t border-white/10">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-brand-400">Wind Speed</span>
+                        <span className="text-sm font-bold">12 km/h</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="lg:col-span-3">
+                  <div className="bg-white p-10 rounded-[48px] border border-ui-border shadow-sm h-full">
+                    <h4 className="text-sm font-bold uppercase tracking-widest text-brand-950 mb-12">5-Day Forecast</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+                      {weather.map((day, i) => (
+                        <div key={i} className="bg-ui-surface p-6 rounded-3xl border border-ui-border text-center group hover:border-brand-500 transition-all">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">
+                            {new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' })}
+                          </p>
+                          <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm group-hover:bg-brand-900 group-hover:text-white transition-all">
+                            {day.condition.includes('Sunny') ? <Zap className="w-6 h-6" /> : <Waves className="w-6 h-6" />}
+                          </div>
+                          <p className="text-2xl font-black text-brand-950 mb-1">{day.temp}°</p>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{day.condition}</p>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    <div className="mt-12 p-8 bg-brand-50 rounded-[32px] border border-brand-100 flex items-center gap-6">
+                      <div className="w-12 h-12 bg-brand-600 rounded-2xl flex items-center justify-center shadow-lg">
+                        <AlertTriangle className="text-white w-6 h-6" />
+                      </div>
+                      <div>
+                        <h5 className="text-sm font-bold text-brand-950 mb-1">Weather Advisory</h5>
+                        <p className="text-xs text-brand-700 font-medium">Light showers expected on March 7th. Adjust irrigation schedules accordingly to prevent waterlogging.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeSubTab === 'brands' && (
+              <motion.div
+                key="brands"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="space-y-12"
+              >
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  <div className="lg:col-span-2 space-y-8">
+                    <div className="bg-white p-10 rounded-[48px] border border-ui-border shadow-sm">
+                      <div className="flex items-center justify-between mb-10">
+                        <h4 className="text-sm font-bold uppercase tracking-widest text-brand-950">My Brands</h4>
+                        <button 
+                          onClick={() => setShowBrandModal(true)}
+                          className="flex items-center gap-2 px-6 py-3 bg-brand-900 text-white rounded-2xl text-[10px] font-bold uppercase tracking-widest hover:bg-brand-950 transition-all shadow-lg shadow-brand-900/20"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Create New Brand
+                        </button>
+                      </div>
+
+                      {myBrands.length === 0 ? (
+                        <div className="text-center py-16 bg-ui-surface rounded-[32px] border border-dashed border-ui-border">
+                          <Store className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+                          <p className="text-slate-400 font-medium">You haven't created any brands yet.</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {myBrands.map(brand => (
+                            <div key={brand.id} className="bg-ui-surface p-6 rounded-[32px] border border-ui-border group hover:border-brand-300 transition-all">
+                              <div className="flex items-center gap-4 mb-4">
+                                <img src={brand.logo_url} alt={brand.name} className="w-12 h-12 rounded-xl object-cover border border-ui-border" referrerPolicy="no-referrer" />
+                                <div>
+                                  <h5 className="text-sm font-bold text-brand-950">{brand.name}</h5>
+                                  <p className="text-[10px] text-brand-600 font-bold uppercase tracking-widest">{brand.status}</p>
+                                </div>
+                              </div>
+                              <p className="text-xs text-slate-500 line-clamp-2 mb-4">{brand.description}</p>
+                              <div className="flex items-center justify-between pt-4 border-t border-ui-border">
+                                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
+                                  Created {new Date(brand.created_at).toLocaleDateString()}
+                                </span>
+                                <button className="text-brand-600 text-[9px] font-bold uppercase tracking-widest hover:underline">
+                                  Manage Brand
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-white p-10 rounded-[48px] border border-ui-border shadow-sm">
+                      <h4 className="text-sm font-bold uppercase tracking-widest text-brand-950 mb-10">Brand Partnerships</h4>
+                      {partnerships.length === 0 ? (
+                        <div className="text-center py-16 bg-ui-surface rounded-[32px] border border-dashed border-ui-border">
+                          <Handshake className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+                          <p className="text-slate-400 font-medium">No active partnerships for this land.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {partnerships.map(p => (
+                            <div key={p.id} className="flex items-center justify-between p-6 bg-ui-surface rounded-[24px] border border-ui-border">
+                              <div className="flex items-center gap-4">
+                                <img src={p.brand_logo} alt={p.brand_name} className="w-10 h-10 rounded-lg object-cover border border-ui-border" referrerPolicy="no-referrer" />
+                                <div>
+                                  <h5 className="text-xs font-bold text-brand-950">{p.brand_name}</h5>
+                                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Partnership #{p.id}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-6">
+                                <span className={cn(
+                                  "px-3 py-1 rounded-md text-[8px] font-bold uppercase tracking-widest border",
+                                  p.status === 'approved' ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-amber-50 text-amber-600 border-amber-100"
+                                )}>
+                                  {p.status}
+                                </span>
+                                <button className="text-slate-400 hover:text-rose-600 transition-colors">
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-8">
+                    <div className="bg-brand-950 p-10 rounded-[48px] text-white shadow-2xl">
+                      <h4 className="text-[10px] font-bold uppercase tracking-widest text-brand-400 mb-8">Available Brands</h4>
+                      <div className="space-y-6">
+                        {brands.filter(b => !myBrands.some(mb => mb.id === b.id)).map(brand => (
+                          <div key={brand.id} className="pb-6 border-b border-white/10 last:border-0 last:pb-0">
+                            <div className="flex items-center gap-4 mb-3">
+                              <img src={brand.logo_url} alt={brand.name} className="w-10 h-10 rounded-lg object-cover border border-white/10" referrerPolicy="no-referrer" />
+                              <div>
+                                <h5 className="text-xs font-bold">{brand.name}</h5>
+                                <p className="text-[9px] text-brand-500 font-bold uppercase tracking-widest">Global Partner</p>
+                              </div>
+                            </div>
+                            <p className="text-[10px] text-slate-400 line-clamp-2 mb-4">{brand.description}</p>
+                            <button 
+                              onClick={() => handleRequestPartnership(brand.id)}
+                              disabled={partnerships.some(p => p.brand_id === brand.id)}
+                              className="w-full py-3 bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed border border-white/10 rounded-xl text-[9px] font-bold uppercase tracking-widest transition-all"
+                            >
+                              {partnerships.some(p => p.brand_id === brand.id) ? 'Request Sent' : 'Request Partnership'}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {showBrandModal && (
+                  <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-brand-950/40 backdrop-blur-sm">
+                    <motion.div 
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      className="bg-white w-full max-w-lg rounded-[48px] p-10 shadow-2xl border border-ui-border"
+                    >
+                      <div className="flex justify-between items-center mb-8">
+                        <h3 className="text-2xl font-black text-brand-950 tracking-tight">Create Your <span className="text-brand-600">Brand</span></h3>
+                        <button onClick={() => setShowBrandModal(false)} className="p-2 hover:bg-ui-surface rounded-full transition-colors">
+                          <X className="w-6 h-6 text-slate-400" />
+                        </button>
+                      </div>
+                      
+                      {createSuccess ? (
+                        <motion.div 
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className="py-20 text-center"
+                        >
+                          <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <CheckCircle2 className="w-10 h-10" />
+                          </div>
+                          <h4 className="text-xl font-black text-brand-950 mb-2">Brand Created!</h4>
+                          <p className="text-slate-500 font-medium">Your new agricultural brand has been launched successfully.</p>
+                        </motion.div>
+                      ) : (
+                        <>
+                          <div className="space-y-6">
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Brand Name</label>
+                              <input 
+                                type="text" 
+                                value={newBrand.name}
+                                onChange={e => setNewBrand({...newBrand, name: e.target.value})}
+                                className="w-full px-6 py-4 bg-ui-surface border border-ui-border rounded-2xl text-sm focus:outline-none focus:border-brand-500 transition-all"
+                                placeholder="e.g. Indus Valley Gold"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Description</label>
+                              <textarea 
+                                value={newBrand.description}
+                                onChange={e => setNewBrand({...newBrand, description: e.target.value})}
+                                className="w-full px-6 py-4 bg-ui-surface border border-ui-border rounded-2xl text-sm focus:outline-none focus:border-brand-500 transition-all h-32 resize-none"
+                                placeholder="Tell the story of your brand..."
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Website</label>
+                                <input 
+                                  type="text" 
+                                  value={newBrand.website}
+                                  onChange={e => setNewBrand({...newBrand, website: e.target.value})}
+                                  className="w-full px-6 py-4 bg-ui-surface border border-ui-border rounded-2xl text-sm focus:outline-none focus:border-brand-500 transition-all"
+                                  placeholder="https://..."
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Logo URL</label>
+                                <input 
+                                  type="text" 
+                                  value={newBrand.logo_url}
+                                  onChange={e => setNewBrand({...newBrand, logo_url: e.target.value})}
+                                  className="w-full px-6 py-4 bg-ui-surface border border-ui-border rounded-2xl text-sm focus:outline-none focus:border-brand-500 transition-all"
+                                  placeholder="https://..."
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <button 
+                            onClick={handleCreateBrand}
+                            className="w-full mt-10 py-5 bg-brand-900 text-white rounded-[24px] text-xs font-bold uppercase tracking-widest hover:bg-brand-950 transition-all shadow-xl shadow-brand-900/20"
+                          >
+                            Launch Brand
+                          </button>
+                        </>
+                      )}
+                    </motion.div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {activeSubTab === 'logistics' && (
+              <motion.div
+                key="logistics"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="space-y-12"
+              >
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  <div className="lg:col-span-2 space-y-8">
+                    <div className="bg-white p-10 rounded-[48px] border border-ui-border shadow-sm">
+                      <h4 className="text-sm font-bold uppercase tracking-widest text-brand-950 mb-10">Active Logistics</h4>
+                      {logisticsPartnerships.length === 0 ? (
+                        <div className="text-center py-16 bg-ui-surface rounded-[32px] border border-dashed border-ui-border">
+                          <Truck className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+                          <p className="text-slate-400 font-medium">No logistics partners connected yet.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {logisticsPartnerships.map(p => (
+                            <div key={p.id} className="flex items-center justify-between p-6 bg-ui-surface rounded-[24px] border border-ui-border">
+                              <div className="flex items-center gap-4">
+                                <img src={p.partner_logo} alt={p.partner_name} className="w-10 h-10 rounded-lg object-cover border border-ui-border" referrerPolicy="no-referrer" />
+                                <div>
+                                  <h5 className="text-xs font-bold text-brand-950">{p.partner_name}</h5>
+                                  <p className="text-[9px] text-brand-600 font-bold uppercase tracking-widest">{p.service_type}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-6">
+                                <span className={cn(
+                                  "px-3 py-1 rounded-md text-[8px] font-bold uppercase tracking-widest border",
+                                  p.status === 'approved' ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-amber-50 text-amber-600 border-amber-100"
+                                )}>
+                                  {p.status}
+                                </span>
+                                <button className="text-slate-400 hover:text-rose-600 transition-colors">
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-brand-50 p-8 rounded-[40px] border border-brand-100 flex items-center gap-6">
+                      <div className="w-12 h-12 bg-brand-600 rounded-2xl flex items-center justify-center shadow-lg">
+                        <MapPin className="text-white w-6 h-6" />
+                      </div>
+                      <div>
+                        <h5 className="text-sm font-bold text-brand-950 mb-1">Logistics Optimization</h5>
+                        <p className="text-xs text-brand-700 font-medium">Based on your current crop rotation, we recommend Cold Chain partners for the upcoming harvest season.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-8">
+                    <div className="bg-brand-950 p-10 rounded-[48px] text-white shadow-2xl">
+                      <h4 className="text-[10px] font-bold uppercase tracking-widest text-brand-400 mb-8">Available Partners</h4>
+                      <div className="space-y-6">
+                        {logisticsPartners.filter(lp => !logisticsPartnerships.some(p => p.partner_id === lp.id)).map(partner => (
+                          <div key={partner.id} className="pb-6 border-b border-white/10 last:border-0 last:pb-0">
+                            <div className="flex items-center gap-4 mb-3">
+                              <img src={partner.logo_url} alt={partner.name} className="w-10 h-10 rounded-lg object-cover border border-white/10" referrerPolicy="no-referrer" />
+                              <div>
+                                <h5 className="text-xs font-bold">{partner.name}</h5>
+                                <p className="text-[9px] text-brand-500 font-bold uppercase tracking-widest">{partner.service_type}</p>
+                              </div>
+                            </div>
+                            <p className="text-[10px] text-slate-400 line-clamp-2 mb-4">{partner.description}</p>
+                            <div className="flex items-center gap-2 mb-4">
+                              <MapPin className="w-3 h-3 text-brand-500" />
+                              <span className="text-[9px] text-slate-400 uppercase tracking-widest font-bold">{partner.coverage_area} Coverage</span>
+                            </div>
+                            <button 
+                              onClick={() => handleRequestLogistics(partner.id)}
+                              className="w-full py-3 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-[9px] font-bold uppercase tracking-widest transition-all"
+                            >
+                              Connect Partner
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [currency, setCurrency] = useState<'PKR' | 'USD' | 'EUR'>('USD');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const res = await fetch('/api/users/1');
+        const data = await res.json();
+        setCurrentUser(data);
+      } catch (error) {
+        console.error("Failed to fetch user:", error);
+      }
+    };
+    fetchUser();
+  }, []);
 
   const formatCurrency = (amount: number) => {
     const rates = { PKR: 1, USD: 0.0036, EUR: 0.0033 };
@@ -3499,7 +4767,14 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col selection:bg-brand-100 selection:text-brand-900">
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} currency={currency} setCurrency={setCurrency} />
+      <Navbar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        currency={currency} 
+        setCurrency={setCurrency}
+        currentUser={currentUser}
+        setCurrentUser={setCurrentUser}
+      />
       
       <main className="flex-grow">
         <AnimatePresence mode="wait">
@@ -3511,7 +4786,7 @@ export default function App() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.4 }}
             >
-              <Hero onExplore={() => setActiveTab('marketplace')} />
+              <Hero onExplore={() => setActiveTab('marketplace')} currentUser={currentUser} setActiveTab={setActiveTab} />
               <AboutSection />
               <Services />
             </motion.div>
@@ -3549,7 +4824,19 @@ export default function App() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.4 }}
             >
-              <Dashboard formatCurrency={formatCurrency} />
+              <InvestorDashboard formatCurrency={formatCurrency} />
+            </motion.div>
+          )}
+
+          {activeTab === 'land_management' && (
+            <motion.div
+              key="land_management"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.4 }}
+            >
+              <LandownerDashboard formatCurrency={formatCurrency} setActiveTab={setActiveTab} />
             </motion.div>
           )}
 
@@ -3645,7 +4932,19 @@ export default function App() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.4 }}
             >
-              <UserProfileManagement />
+              <UserProfileManagement currentUser={currentUser} setCurrentUser={setCurrentUser} />
+            </motion.div>
+          )}
+
+          {activeTab === 'farmer_tools' && (
+            <motion.div
+              key="farmer_tools"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.4 }}
+            >
+              <FarmerTools formatCurrency={formatCurrency} />
             </motion.div>
           )}
         </AnimatePresence>
